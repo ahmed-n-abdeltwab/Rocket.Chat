@@ -689,6 +689,108 @@ describe('[Chat]', () => {
 		});
 	});
 
+	describe('Threaded replies with tmid', () => {
+		it('should send a threaded reply to a message in a channel using tmid with channel name', async () => {
+			const channelName = `chat-api-tmid-channel-test-${Date.now()}`;
+			let testChannelResponse;
+			try {
+				// 1. Create a new public channel for testing
+				testChannelResponse = await createRoom({ type: 'c', name: channelName });
+				expect(testChannelResponse.body.success).to.be.true;
+				const testChannel = testChannelResponse.body.channel;
+
+				// 2. Post an initial message to this channel
+				const initialMessagePayload = {
+					channel: `#${channelName}`, // Using channel name
+					text: 'Initial message for tmid test',
+				};
+				const initialMessageResponse = await request.post(api('chat.postMessage')).set(credentials).send(initialMessagePayload);
+				expect(initialMessageResponse.status).to.equal(200);
+				expect(initialMessageResponse.body.success).to.be.true;
+				const initialMessageId = initialMessageResponse.body.message._id;
+
+				// 3. Capture the _id of the successfully posted message (done above)
+
+				// 4. Post a second message (the reply) to the same channel, including tmid
+				const replyMessagePayload = {
+					channel: `#${channelName}`, // Using channel name
+					text: 'This is a threaded reply',
+					tmid: initialMessageId,
+				};
+				const replyMessageResponse = await request.post(api('chat.postMessage')).set(credentials).send(replyMessagePayload);
+
+				// 5. Assert that the second message is created successfully
+				expect(replyMessageResponse.status).to.equal(200);
+				expect(replyMessageResponse.body.success).to.be.true;
+
+				// 6. Assert that the response for the second message shows it has the correct tmid
+				expect(replyMessageResponse.body.message.tmid).to.equal(initialMessageId);
+
+				// 7. Optionally, retrieve the second message using chat.getMessage and verify its tmid
+				const getReplyMessageResponse = await request.get(api('chat.getMessage')).set(credentials).query({ msgId: replyMessageResponse.body.message._id });
+				expect(getReplyMessageResponse.status).to.equal(200);
+				expect(getReplyMessageResponse.body.success).to.be.true;
+				expect(getReplyMessageResponse.body.message.tmid).to.equal(initialMessageId);
+
+			} finally {
+				// 8. Clean up by deleting the test channel
+				if (testChannelResponse && testChannelResponse.body.success) {
+					await deleteRoom({ type: 'c', roomId: testChannelResponse.body.channel._id });
+				}
+			}
+		});
+
+		it('should send a threaded reply to a message in a channel using tmid with room ID', async () => {
+			const channelName = `chat-api-tmid-roomid-test-${Date.now()}`;
+			let testRoomResponse;
+			try {
+				// 1. Create a new public channel for testing
+				testRoomResponse = await createRoom({ type: 'c', name: channelName });
+				expect(testRoomResponse.body.success).to.be.true;
+				const testRoomId = testRoomResponse.body.channel._id;
+
+				// 2. Post an initial message to this channel using its roomId
+				const initialMessagePayload = {
+					roomId: testRoomId,
+					text: 'Initial message for tmid with roomId test',
+				};
+				const initialMessageResponse = await request.post(api('chat.postMessage')).set(credentials).send(initialMessagePayload);
+				expect(initialMessageResponse.status).to.equal(200);
+				expect(initialMessageResponse.body.success).to.be.true;
+				const initialMessageId = initialMessageResponse.body.message._id;
+
+				// 3. Capture the _id of the successfully posted message (done above)
+
+				// 4. Post a second message (the reply) to the same room using its roomId, including tmid
+				const replyMessagePayload = {
+					roomId: testRoomId,
+					text: 'This is a threaded reply using roomId',
+					tmid: initialMessageId,
+				};
+				const replyMessageResponse = await request.post(api('chat.postMessage')).set(credentials).send(replyMessagePayload);
+
+				// 5. Assert that the second message is created successfully
+				expect(replyMessageResponse.status).to.equal(200);
+				expect(replyMessageResponse.body.success).to.be.true;
+
+				// 6. Assert that the response for the second message shows it has the correct tmid
+				expect(replyMessageResponse.body.message.tmid).to.equal(initialMessageId);
+
+				// 7. Optionally, retrieve the second message using chat.getMessage and verify its tmid
+				const getReplyMessageResponse = await request.get(api('chat.getMessage')).set(credentials).query({ msgId: replyMessageResponse.body.message._id });
+				expect(getReplyMessageResponse.status).to.equal(200);
+				expect(getReplyMessageResponse.body.success).to.be.true;
+				expect(getReplyMessageResponse.body.message.tmid).to.equal(initialMessageId);
+
+			} finally {
+				// 8. Clean up by deleting the test channel
+				if (testRoomResponse && testRoomResponse.body.success) {
+					await deleteRoom({ type: 'c', roomId: testRoomResponse.body.channel._id });
+				}
+			}
+		});
+	});
+
 	describe('/chat.getMessage', () => {
 		it('should retrieve the message successfully', (done) => {
 			void request
