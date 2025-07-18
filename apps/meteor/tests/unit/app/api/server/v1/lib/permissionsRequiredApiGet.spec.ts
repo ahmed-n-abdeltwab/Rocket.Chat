@@ -57,6 +57,11 @@ const stubs = {
 			rawConnectHandlers: [],
 		},
 	},
+	'meteor/accounts-base': {
+		Accounts: {
+			_hashLoginToken: (token: string) => token,
+		},
+	},
 };
 
 const { API } = mock.noCallThru().load<{ API: any }>('../../../../../../../app/api/server/api', stubs);
