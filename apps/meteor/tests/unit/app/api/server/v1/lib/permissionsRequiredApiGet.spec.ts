@@ -52,6 +52,11 @@ const stubs = {
 			userId: Sinon.stub().returns('userId'),
 		},
 	},
+	'meteor/webapp': {
+		WebApp: {
+			rawConnectHandlers: [],
+		},
+	},
 };
 
 const { API } = mock.noCallThru().load<{ API: any }>('../../../../../../../app/api/server/api', stubs);
