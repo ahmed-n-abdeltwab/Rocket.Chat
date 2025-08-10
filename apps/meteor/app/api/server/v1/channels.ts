@@ -5,6 +5,7 @@ import {
 	ajv,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
+	ForbiddenErrorResponse,
 	validateForbiddenErrorResponse,
 	isChannelsAddAllProps,
 	isChannelsArchiveProps,
@@ -818,8 +819,6 @@ const channelsEndpoints = API.v1.post(
 	async function action() {
 		const { userId, bodyParams } = this;
 
-		let error;
-
 		try {
 			await API.channels?.create.validate({
 				user: {
@@ -844,14 +843,9 @@ const channelsEndpoints = API.v1.post(
 			});
 		} catch (e: any) {
 			if (e.message === 'unauthorized') {
-				error = API.v1.forbidden();
-			} else {
-				error = API.v1.failure(e.message);
+				return API.v1.forbidden<ForbiddenErrorResponse>();
 			}
-		}
-
-		if (error) {
-			return error;
+			return API.v1.failure(e.message);
 		}
 
 		if (bodyParams.teams) {
@@ -873,7 +867,13 @@ const channelsEndpoints = API.v1.post(
 			bodyParams.members = [...membersToAdd].filter(Boolean) as string[];
 		}
 
-		return API.v1.success(await API.channels?.create.execute(userId, bodyParams));
+		const result = await API.channels?.create.execute(userId, bodyParams);
+
+		if (!result) {
+			return API.v1.failure('Channel creation failed');
+		}
+
+		return API.v1.success(result);
 	},
 );
 
