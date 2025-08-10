@@ -5,7 +5,6 @@ import {
 	ajv,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
-	ForbiddenErrorResponse,
 	validateForbiddenErrorResponse,
 	isChannelsAddAllProps,
 	isChannelsArchiveProps,
@@ -27,6 +26,7 @@ import {
 	isChannelsFilesListProps,
 	isChannelsOnlineProps,
 } from '@rocket.chat/rest-typings';
+import type { ForbiddenErrorResponse } from '@rocket.chat/rest-typings';
 import { Meteor } from 'meteor/meteor';
 
 import { isTruthy } from '../../../../lib/isTruthy';
