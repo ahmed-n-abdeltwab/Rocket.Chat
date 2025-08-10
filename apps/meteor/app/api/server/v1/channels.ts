@@ -739,7 +739,7 @@ API.channels = {
 	},
 };
 
-type ChannelsCreateProps = {
+export type ChannelsCreateProps = {
 	name: string;
 	members?: string[];
 	teams?: string[];
