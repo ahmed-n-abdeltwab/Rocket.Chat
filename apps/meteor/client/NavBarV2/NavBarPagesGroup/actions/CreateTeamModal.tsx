@@ -1,4 +1,4 @@
-import type { SidepanelItem } from '@rocket.chat/core-typings';
+import type { IRoom } from '@rocket.chat/core-typings';
 import {
 	Box,
 	Button,
@@ -142,7 +142,9 @@ const CreateTeamModal = ({ onClose }: CreateTeamModalProps) => {
 		showChannels,
 		showDiscussions,
 	}: CreateTeamModalInputs): Promise<void> => {
-		const sidepanelItem = [showChannels && 'channels', showDiscussions && 'discussions'].filter(Boolean) as [SidepanelItem, SidepanelItem?];
+		const sidepanelItem = [showChannels && 'channels', showDiscussions && 'discussions'].filter(Boolean) as NonNullable<
+			IRoom['sidepanel']
+		>['items'];
 		const params = {
 			name,
 			members,
