@@ -25,7 +25,7 @@ import {
 	isChannelsFilesListProps,
 	isChannelsOnlineProps,
 } from '@rocket.chat/rest-typings';
-import type { PaginatedRequest } from '@rocket.chat/rest-typings';
+import type { ForbiddenErrorResponse, PaginatedRequest } from '@rocket.chat/rest-typings';
 import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
@@ -740,70 +740,140 @@ API.channels = {
 	},
 };
 
-API.v1.addRoute(
-	'channels.create',
-	{ authRequired: true },
-	{
-		async post() {
-			const { userId, bodyParams } = this;
+export type ChannelsCreateProps = {
+	name: string;
+	members?: string[];
+	teams?: string[];
+	readOnly?: boolean;
+	extraData?: {
+		broadcast?: boolean;
+		encrypted?: boolean;
+		teamId?: string;
+	};
+	excludeSelf?: boolean;
+};
 
-			let error;
-
-			try {
-				await API.channels?.create.validate({
-					user: {
-						value: userId,
-					},
-					name: {
-						value: bodyParams.name,
-						key: 'name',
-					},
-					members: {
-						value: bodyParams.members,
-						key: 'members',
-					},
-					teams: {
-						value: bodyParams.teams,
-						key: 'teams',
-					},
-					teamId: {
-						value: bodyParams.extraData?.teamId,
-						key: 'teamId',
-					},
-				});
-			} catch (e: any) {
-				if (e.message === 'unauthorized') {
-					error = API.v1.forbidden();
-				} else {
-					error = API.v1.failure(e.message);
-				}
-			}
-
-			if (error) {
-				return error;
-			}
-
-			if (bodyParams.teams) {
-				const canSeeAllTeams = await hasPermissionAsync(this.userId, 'view-all-teams');
-				const teams = await Team.listByNames(bodyParams.teams, { projection: { _id: 1 } });
-				const teamMembers = [];
-
-				for (const team of teams) {
-					// eslint-disable-next-line no-await-in-loop
-					const { records: members } = await Team.members(this.userId, team._id, canSeeAllTeams, {
-						offset: 0,
-						count: Number.MAX_SAFE_INTEGER,
-					});
-					const uids = members.map((member) => member.user.username);
-					teamMembers.push(...uids);
-				}
-
-				const membersToAdd = new Set([...teamMembers, ...(bodyParams.members || [])]);
-				bodyParams.members = [...membersToAdd].filter(Boolean) as string[];
-			}
-
-			return API.v1.success(await API.channels?.create.execute(userId, bodyParams));
+const channelsCreatePropsSchema = {
+	type: 'object',
+	properties: {
+		name: {
+			type: 'string',
 		},
+		members: {
+			type: 'array',
+		},
+		teams: {
+			type: 'array',
+		},
+		readonly: {
+			type: 'boolean',
+		},
+		extraData: {
+			type: 'object',
+			properties: {
+				broadcast: {
+					type: 'boolean',
+				},
+				encrypted: {
+					type: 'boolean',
+				},
+				teamId: {
+					type: 'string',
+				},
+			},
+			additionalProperties: false,
+			nullable: true,
+		},
+	},
+	required: ['name'],
+	additionalProperties: false,
+};
+
+const isChannelsCreateProps = ajv.compile<ChannelsCreateProps>(channelsCreatePropsSchema);
+
+const channelsEndpoints = API.v1.post(
+	'channels.create',
+	{
+		authRequired: true,
+		body: isChannelsCreateProps,
+		response: {
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+			403: validateForbiddenErrorResponse,
+			200: ajv.compile<{
+				channel: Omit<IRoom, 'joinCode' | 'members' | 'importIds' | 'e2e'>;
+			}>({
+				type: 'object',
+				properties: {
+					channel: { $ref: '#/components/schemas/IRoom' },
+					success: {
+						type: 'boolean',
+						enum: [true],
+					},
+				},
+				required: ['channel', 'success'],
+				additionalProperties: false,
+			}),
+		},
+	},
+	async function action() {
+		const { userId, bodyParams } = this;
+
+		try {
+			await API.channels?.create.validate({
+				user: {
+					value: userId,
+				},
+				name: {
+					value: bodyParams.name,
+					key: 'name',
+				},
+				members: {
+					value: bodyParams.members,
+					key: 'members',
+				},
+				teams: {
+					value: bodyParams.teams,
+					key: 'teams',
+				},
+				teamId: {
+					value: bodyParams.extraData?.teamId,
+					key: 'teamId',
+				},
+			});
+		} catch (e: any) {
+			if (e.message === 'unauthorized') {
+				return API.v1.forbidden<ForbiddenErrorResponse>();
+			}
+			return API.v1.failure(e.message);
+		}
+
+		if (bodyParams.teams) {
+			const canSeeAllTeams = await hasPermissionAsync(this.userId, 'view-all-teams');
+			const teams = await Team.listByNames(bodyParams.teams, { projection: { _id: 1 } });
+			const teamMembers = [];
+
+			for (const team of teams) {
+				// eslint-disable-next-line no-await-in-loop
+				const { records: members } = await Team.members(this.userId, team._id, canSeeAllTeams, {
+					offset: 0,
+					count: Number.MAX_SAFE_INTEGER,
+				});
+				const uids = members.map((member) => member.user.username);
+				teamMembers.push(...uids);
+			}
+
+			const membersToAdd = new Set([...teamMembers, ...(bodyParams.members || [])]);
+			bodyParams.members = [...membersToAdd].filter(Boolean) as string[];
+		}
+
+		const result = await API.channels?.create.execute(userId, bodyParams);
+
+		if (!result) {
+			return API.v1.failure('Channel creation failed');
+		}
+
+		return API.v1.success(result);
 	},
 );
 
