@@ -753,6 +753,10 @@ export type ChannelsCreateProps = {
 	excludeSelf?: boolean;
 };
 
+type ChannelsListProps = PaginatedRequest<{ _id?: string }>;
+
+type ChannelsListJoinedProps = PaginatedRequest<{ roomId?: string }>;
+
 const channelsCreatePropsSchema = {
 	type: 'object',
 	properties: {
@@ -788,257 +792,6 @@ const channelsCreatePropsSchema = {
 	required: ['name'],
 	additionalProperties: false,
 };
-
-const isChannelsCreateProps = ajv.compile<ChannelsCreateProps>(channelsCreatePropsSchema);
-
-const channelsEndpoints = API.v1.post(
-	'channels.create',
-	{
-		authRequired: true,
-		body: isChannelsCreateProps,
-		response: {
-			400: validateBadRequestErrorResponse,
-			401: validateUnauthorizedErrorResponse,
-			403: validateForbiddenErrorResponse,
-			200: ajv.compile<{
-				channel: Omit<IRoom, 'joinCode' | 'members' | 'importIds' | 'e2e'>;
-			}>({
-				type: 'object',
-				properties: {
-					channel: { $ref: '#/components/schemas/IRoom' },
-					success: {
-						type: 'boolean',
-						enum: [true],
-					},
-				},
-				required: ['channel', 'success'],
-				additionalProperties: false,
-			}),
-		},
-	},
-	async function action() {
-		const { userId, bodyParams } = this;
-
-		try {
-			await API.channels?.create.validate({
-				user: {
-					value: userId,
-				},
-				name: {
-					value: bodyParams.name,
-					key: 'name',
-				},
-				members: {
-					value: bodyParams.members,
-					key: 'members',
-				},
-				teams: {
-					value: bodyParams.teams,
-					key: 'teams',
-				},
-				teamId: {
-					value: bodyParams.extraData?.teamId,
-					key: 'teamId',
-				},
-			});
-		} catch (e: any) {
-			if (e.message === 'unauthorized') {
-				return API.v1.forbidden<ForbiddenErrorResponse>();
-			}
-			return API.v1.failure(e.message);
-		}
-
-		if (bodyParams.teams) {
-			const canSeeAllTeams = await hasPermissionAsync(this.userId, 'view-all-teams');
-			const teams = await Team.listByNames(bodyParams.teams, { projection: { _id: 1 } });
-			const teamMembers = [];
-
-			for (const team of teams) {
-				// eslint-disable-next-line no-await-in-loop
-				const { records: members } = await Team.members(this.userId, team._id, canSeeAllTeams, {
-					offset: 0,
-					count: Number.MAX_SAFE_INTEGER,
-				});
-				const uids = members.map((member) => member.user.username);
-				teamMembers.push(...uids);
-			}
-
-			const membersToAdd = new Set([...teamMembers, ...(bodyParams.members || [])]);
-			bodyParams.members = [...membersToAdd].filter(Boolean) as string[];
-		}
-
-		const result = await API.channels?.create.execute(userId, bodyParams);
-
-		if (!result) {
-			return API.v1.failure('Channel creation failed');
-		}
-
-		return API.v1.success(result);
-	},
-);
-
-API.v1.addRoute(
-	'channels.files',
-	{ authRequired: true, validateParams: isChannelsFilesListProps },
-	{
-		async get() {
-			const { typeGroup, name, roomId, roomName } = this.queryParams;
-
-			const findResult = await findChannelByIdOrName({
-				params: {
-					...(roomId ? { roomId } : {}),
-					...(roomName ? { roomName } : {}),
-				},
-				checkedArchived: false,
-			});
-
-			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
-				return API.v1.forbidden();
-			}
-
-			const { offset, count } = await getPaginationItems(this.queryParams);
-			const { sort, fields, query } = await this.parseJsonQuery();
-
-			const filter = {
-				rid: findResult._id,
-				...query,
-				...(name ? { name: { $regex: name || '', $options: 'i' } } : {}),
-				...(typeGroup ? { typeGroup } : {}),
-			};
-
-			const { cursor, totalCount } = await Uploads.findPaginatedWithoutThumbs(filter, {
-				sort: sort || { name: 1 },
-				skip: offset,
-				limit: count,
-				projection: fields,
-			});
-
-			const [files, total] = await Promise.all([cursor.toArray(), totalCount]);
-
-			return API.v1.success({
-				files: await addUserToFileObj(files),
-				count: files.length,
-				offset,
-				total,
-			});
-		},
-	},
-);
-
-API.v1.addRoute(
-	'channels.getIntegrations',
-	{
-		authRequired: true,
-		permissionsRequired: {
-			GET: {
-				permissions: [
-					'manage-outgoing-integrations',
-					'manage-own-outgoing-integrations',
-					'manage-incoming-integrations',
-					'manage-own-incoming-integrations',
-				],
-				operation: 'hasAny',
-			},
-		},
-	},
-	{
-		async get() {
-			const findResult = await findChannelByIdOrName({
-				params: this.queryParams,
-				checkedArchived: false,
-			});
-
-			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
-				return API.v1.forbidden();
-			}
-
-			let includeAllPublicChannels = true;
-			if (typeof this.queryParams.includeAllPublicChannels !== 'undefined') {
-				includeAllPublicChannels = this.queryParams.includeAllPublicChannels === 'true';
-			}
-
-			let ourQuery: { channel: string | { $in: string[] } } = {
-				channel: `#${findResult.name}`,
-			};
-
-			if (includeAllPublicChannels) {
-				ourQuery.channel = {
-					$in: [ourQuery.channel as string, 'all_public_channels'],
-				};
-			}
-
-			const params = this.queryParams;
-			const { offset, count } = await getPaginationItems(params);
-			const { sort, fields: projection, query } = await this.parseJsonQuery();
-
-			ourQuery = Object.assign(await mountIntegrationQueryBasedOnPermissions(this.userId), query, ourQuery);
-
-			const { cursor, totalCount } = await Integrations.findPaginated(ourQuery, {
-				sort: sort || { _createdAt: 1 },
-				skip: offset,
-				limit: count,
-				projection,
-			});
-
-			const [integrations, total] = await Promise.all([cursor.toArray(), totalCount]);
-
-			return API.v1.success({
-				integrations,
-				count: integrations.length,
-				offset,
-				total,
-			});
-		},
-	},
-);
-
-API.v1.addRoute(
-	'channels.info',
-	{ authRequired: true },
-	{
-		async get() {
-			const findResult = await findChannelByIdOrName({
-				params: this.queryParams,
-				checkedArchived: false,
-				userId: this.userId,
-			});
-
-			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
-				return API.v1.forbidden();
-			}
-
-			return API.v1.success({
-				channel: findResult,
-			});
-		},
-	},
-);
-
-API.v1.addRoute(
-	'channels.invite',
-	{ authRequired: true },
-	{
-		async post() {
-			const findResult = await findChannelByIdOrName({ params: this.bodyParams });
-
-			const users = await getUserListFromParams(this.bodyParams);
-
-			if (!users.length) {
-				return API.v1.failure('invalid-user-invite-list', 'Cannot invite if no users are provided');
-			}
-
-			await addUsersToRoomMethod(this.userId, { rid: findResult._id, users: users.map((u) => u.username).filter(isTruthy) }, this.user);
-
-			return API.v1.success({
-				channel: await findChannelByIdOrName({ params: this.bodyParams, userId: this.userId }),
-			});
-		},
-	},
-);
-
-type ChannelsListProps = PaginatedRequest<{ _id?: string }>;
-
-type ChannelsListJoinedProps = PaginatedRequest<{ roomId?: string }>;
 
 const channelsListPropsSchema = {
 	type: 'object',
@@ -1090,7 +843,94 @@ const isChannelsListProps = ajv.compile<ChannelsListProps>(channelsListPropsSche
 
 const isChannelsListJoinedProps = ajv.compile<ChannelsListJoinedProps>(channelsListJoinedPropsSchema);
 
+const isChannelsCreateProps = ajv.compile<ChannelsCreateProps>(channelsCreatePropsSchema);
+
 const channelsEndpoints = API.v1
+	.post(
+		'channels.create',
+		{
+			authRequired: true,
+			body: isChannelsCreateProps,
+			response: {
+				400: validateBadRequestErrorResponse,
+				401: validateUnauthorizedErrorResponse,
+				403: validateForbiddenErrorResponse,
+				200: ajv.compile<{
+					channel: Omit<IRoom, 'joinCode' | 'members' | 'importIds' | 'e2e'>;
+				}>({
+					type: 'object',
+					properties: {
+						channel: { $ref: '#/components/schemas/IRoom' },
+						success: {
+							type: 'boolean',
+							enum: [true],
+						},
+					},
+					required: ['channel', 'success'],
+					additionalProperties: false,
+				}),
+			},
+		},
+		async function action() {
+			const { userId, bodyParams } = this;
+
+			try {
+				await API.channels?.create.validate({
+					user: {
+						value: userId,
+					},
+					name: {
+						value: bodyParams.name,
+						key: 'name',
+					},
+					members: {
+						value: bodyParams.members,
+						key: 'members',
+					},
+					teams: {
+						value: bodyParams.teams,
+						key: 'teams',
+					},
+					teamId: {
+						value: bodyParams.extraData?.teamId,
+						key: 'teamId',
+					},
+				});
+			} catch (e: any) {
+				if (e.message === 'unauthorized') {
+					return API.v1.forbidden<ForbiddenErrorResponse>();
+				}
+				return API.v1.failure(e.message);
+			}
+
+			if (bodyParams.teams) {
+				const canSeeAllTeams = await hasPermissionAsync(this.userId, 'view-all-teams');
+				const teams = await Team.listByNames(bodyParams.teams, { projection: { _id: 1 } });
+				const teamMembers = [];
+
+				for (const team of teams) {
+					// eslint-disable-next-line no-await-in-loop
+					const { records: members } = await Team.members(this.userId, team._id, canSeeAllTeams, {
+						offset: 0,
+						count: Number.MAX_SAFE_INTEGER,
+					});
+					const uids = members.map((member) => member.user.username);
+					teamMembers.push(...uids);
+				}
+
+				const membersToAdd = new Set([...teamMembers, ...(bodyParams.members || [])]);
+				bodyParams.members = [...membersToAdd].filter(Boolean) as string[];
+			}
+
+			const result = await API.channels?.create.execute(userId, bodyParams);
+
+			if (!result) {
+				return API.v1.failure('Channel creation failed');
+			}
+
+			return API.v1.success(result);
+		},
+	)
 	.get(
 		'channels.list',
 		{
@@ -1266,6 +1106,165 @@ const channelsEndpoints = API.v1
 			});
 		},
 	);
+
+API.v1.addRoute(
+	'channels.files',
+	{ authRequired: true, validateParams: isChannelsFilesListProps },
+	{
+		async get() {
+			const { typeGroup, name, roomId, roomName } = this.queryParams;
+
+			const findResult = await findChannelByIdOrName({
+				params: {
+					...(roomId ? { roomId } : {}),
+					...(roomName ? { roomName } : {}),
+				},
+				checkedArchived: false,
+			});
+
+			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
+				return API.v1.forbidden();
+			}
+
+			const { offset, count } = await getPaginationItems(this.queryParams);
+			const { sort, fields, query } = await this.parseJsonQuery();
+
+			const filter = {
+				rid: findResult._id,
+				...query,
+				...(name ? { name: { $regex: name || '', $options: 'i' } } : {}),
+				...(typeGroup ? { typeGroup } : {}),
+			};
+
+			const { cursor, totalCount } = await Uploads.findPaginatedWithoutThumbs(filter, {
+				sort: sort || { name: 1 },
+				skip: offset,
+				limit: count,
+				projection: fields,
+			});
+
+			const [files, total] = await Promise.all([cursor.toArray(), totalCount]);
+
+			return API.v1.success({
+				files: await addUserToFileObj(files),
+				count: files.length,
+				offset,
+				total,
+			});
+		},
+	},
+);
+
+API.v1.addRoute(
+	'channels.getIntegrations',
+	{
+		authRequired: true,
+		permissionsRequired: {
+			GET: {
+				permissions: [
+					'manage-outgoing-integrations',
+					'manage-own-outgoing-integrations',
+					'manage-incoming-integrations',
+					'manage-own-incoming-integrations',
+				],
+				operation: 'hasAny',
+			},
+		},
+	},
+	{
+		async get() {
+			const findResult = await findChannelByIdOrName({
+				params: this.queryParams,
+				checkedArchived: false,
+			});
+
+			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
+				return API.v1.forbidden();
+			}
+
+			let includeAllPublicChannels = true;
+			if (typeof this.queryParams.includeAllPublicChannels !== 'undefined') {
+				includeAllPublicChannels = this.queryParams.includeAllPublicChannels === 'true';
+			}
+
+			let ourQuery: { channel: string | { $in: string[] } } = {
+				channel: `#${findResult.name}`,
+			};
+
+			if (includeAllPublicChannels) {
+				ourQuery.channel = {
+					$in: [ourQuery.channel as string, 'all_public_channels'],
+				};
+			}
+
+			const params = this.queryParams;
+			const { offset, count } = await getPaginationItems(params);
+			const { sort, fields: projection, query } = await this.parseJsonQuery();
+
+			ourQuery = Object.assign(await mountIntegrationQueryBasedOnPermissions(this.userId), query, ourQuery);
+
+			const { cursor, totalCount } = await Integrations.findPaginated(ourQuery, {
+				sort: sort || { _createdAt: 1 },
+				skip: offset,
+				limit: count,
+				projection,
+			});
+
+			const [integrations, total] = await Promise.all([cursor.toArray(), totalCount]);
+
+			return API.v1.success({
+				integrations,
+				count: integrations.length,
+				offset,
+				total,
+			});
+		},
+	},
+);
+
+API.v1.addRoute(
+	'channels.info',
+	{ authRequired: true },
+	{
+		async get() {
+			const findResult = await findChannelByIdOrName({
+				params: this.queryParams,
+				checkedArchived: false,
+				userId: this.userId,
+			});
+
+			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
+				return API.v1.forbidden();
+			}
+
+			return API.v1.success({
+				channel: findResult,
+			});
+		},
+	},
+);
+
+API.v1.addRoute(
+	'channels.invite',
+	{ authRequired: true },
+	{
+		async post() {
+			const findResult = await findChannelByIdOrName({ params: this.bodyParams });
+
+			const users = await getUserListFromParams(this.bodyParams);
+
+			if (!users.length) {
+				return API.v1.failure('invalid-user-invite-list', 'Cannot invite if no users are provided');
+			}
+
+			await addUsersToRoomMethod(this.userId, { rid: findResult._id, users: users.map((u) => u.username).filter(isTruthy) }, this.user);
+
+			return API.v1.success({
+				channel: await findChannelByIdOrName({ params: this.bodyParams, userId: this.userId }),
+			});
+		},
+	},
+);
 
 API.v1.addRoute(
 	'channels.members',
