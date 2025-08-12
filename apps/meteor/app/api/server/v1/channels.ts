@@ -1187,7 +1187,7 @@ const channelsEndpoints = API.v1
 			});
 
 			const [channels, total] = await Promise.all([cursor.toArray(), totalCount]);
-			
+
 			return API.v1.success({
 				channels: await Promise.all(channels.map((room) => composeRoomWithLastMessage(room, this.userId))),
 				offset,
