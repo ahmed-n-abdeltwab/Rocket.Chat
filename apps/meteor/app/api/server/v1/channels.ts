@@ -1293,6 +1293,28 @@ API.v1.addRoute(
 );
 
 API.v1.addRoute(
+	'channels.info',
+	{ authRequired: true },
+	{
+		async get() {
+			const findResult = await findChannelByIdOrName({
+				params: this.queryParams,
+				checkedArchived: false,
+				userId: this.userId,
+			});
+
+			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
+				return API.v1.forbidden();
+			}
+
+			return API.v1.success({
+				channel: findResult,
+			});
+		},
+	},
+);
+
+API.v1.addRoute(
 	'channels.invite',
 	{ authRequired: true },
 	{
