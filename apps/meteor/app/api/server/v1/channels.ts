@@ -757,6 +757,8 @@ type ChannelsListProps = PaginatedRequest<{ _id?: string }>;
 
 type ChannelsListJoinedProps = PaginatedRequest<{ roomId?: string }>;
 
+type ChannelsInfoProps = { roomId: string } | { roomName: string };
+
 const channelsCreatePropsSchema = {
 	type: 'object',
 	properties: {
@@ -839,11 +841,38 @@ const channelsListJoinedPropsSchema = {
 	additionalProperties: false,
 };
 
+const channelsInfoPropsSchema = {
+	anyOf: [
+		{
+			type: 'object',
+			properties: {
+				roomId: {
+					type: 'string',
+				},
+			},
+			required: ['roomId'],
+			additionalProperties: false,
+		},
+		{
+			type: 'object',
+			properties: {
+				roomName: {
+					type: 'string',
+				},
+			},
+			required: ['roomName'],
+			additionalProperties: false,
+		},
+	],
+};
+
+const isChannelsCreateProps = ajv.compile<ChannelsCreateProps>(channelsCreatePropsSchema);
+
 const isChannelsListProps = ajv.compile<ChannelsListProps>(channelsListPropsSchema);
 
 const isChannelsListJoinedProps = ajv.compile<ChannelsListJoinedProps>(channelsListJoinedPropsSchema);
 
-const isChannelsCreateProps = ajv.compile<ChannelsCreateProps>(channelsCreatePropsSchema);
+const isChannelsInfoProps = ajv.compile<ChannelsInfoProps>(channelsInfoPropsSchema);
 
 const channelsEndpoints = API.v1
 	.post(
@@ -856,11 +885,11 @@ const channelsEndpoints = API.v1
 				401: validateUnauthorizedErrorResponse,
 				403: validateForbiddenErrorResponse,
 				200: ajv.compile<{
-					channel: Omit<IRoom, 'joinCode' | 'members' | 'importIds' | 'e2e'>;
+					channel?: Omit<IRoom, 'joinCode' | 'members' | 'importIds' | 'e2e'>;
 				}>({
 					type: 'object',
 					properties: {
-						channel: { $ref: '#/components/schemas/IRoom' },
+						channel: { anyOf: [{ $ref: '#/components/schemas/IRoom' }, { type: 'null' }] },
 						success: {
 							type: 'boolean',
 							enum: [true],
@@ -1105,6 +1134,47 @@ const channelsEndpoints = API.v1
 				total,
 			});
 		},
+	)
+	.get(
+		'channels.info',
+		{
+			authRequired: true,
+			query: isChannelsInfoProps,
+			response: {
+				400: validateBadRequestErrorResponse,
+				401: validateUnauthorizedErrorResponse,
+				403: validateForbiddenErrorResponse,
+				200: ajv.compile<{
+					channel: IRoom;
+				}>({
+					type: 'object',
+					properties: {
+						channel: { $ref: '#/components/schemas/IRoom' },
+						success: {
+							type: 'boolean',
+							enum: [true],
+						},
+					},
+					required: ['channel', 'success'],
+					additionalProperties: false,
+				}),
+			},
+		},
+		async function action() {
+			const findResult = await findChannelByIdOrName({
+				params: this.queryParams,
+				checkedArchived: false,
+				userId: this.userId,
+			});
+
+			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
+				return API.v1.forbidden<ForbiddenErrorResponse>();
+			}
+
+			return API.v1.success({
+				channel: findResult,
+			});
+		},
 	);
 
 API.v1.addRoute(
@@ -1217,28 +1287,6 @@ API.v1.addRoute(
 				count: integrations.length,
 				offset,
 				total,
-			});
-		},
-	},
-);
-
-API.v1.addRoute(
-	'channels.info',
-	{ authRequired: true },
-	{
-		async get() {
-			const findResult = await findChannelByIdOrName({
-				params: this.queryParams,
-				checkedArchived: false,
-				userId: this.userId,
-			});
-
-			if (!(await canAccessRoomAsync(findResult, { _id: this.userId }))) {
-				return API.v1.forbidden();
-			}
-
-			return API.v1.success({
-				channel: findResult,
 			});
 		},
 	},

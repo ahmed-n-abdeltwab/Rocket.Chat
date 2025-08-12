@@ -65,9 +65,6 @@ export type ChannelsEndpoints = {
 			team: ITeam;
 		};
 	};
-	'/v1/channels.info': {
-		GET: (params: { roomId: string } | { roomName: string }) => { channel: IRoom };
-	};
 	'/v1/channels.counters': {
 		GET: (params: { roomId: string; userId: string } | { roomName: string; userId: string }) => {
 			joined: boolean;
