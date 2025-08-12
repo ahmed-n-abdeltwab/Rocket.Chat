@@ -2,6 +2,10 @@ import { Team, Room } from '@rocket.chat/core-services';
 import { TEAM_TYPE, type IRoom, type ISubscription, type IUser, type RoomType, type UserStatus } from '@rocket.chat/core-typings';
 import { Integrations, Messages, Rooms, Subscriptions, Uploads, Users } from '@rocket.chat/models';
 import {
+	ajv,
+	validateBadRequestErrorResponse,
+	validateUnauthorizedErrorResponse,
+	validateForbiddenErrorResponse,
 	isChannelsAddAllProps,
 	isChannelsArchiveProps,
 	isChannelsHistoryProps,
@@ -18,11 +22,12 @@ import {
 	isChannelsConvertToTeamProps,
 	isChannelsSetReadOnlyProps,
 	isChannelsDeleteProps,
-	isChannelsListProps,
 	isChannelsFilesListProps,
 	isChannelsOnlineProps,
 } from '@rocket.chat/rest-typings';
+import type { PaginatedRequest } from '@rocket.chat/rest-typings';
 import { Meteor } from 'meteor/meteor';
+import type { Filter } from 'mongodb';
 
 import { isTruthy } from '../../../../lib/isTruthy';
 import { eraseRoom } from '../../../../server/lib/eraseRoom';
@@ -51,6 +56,7 @@ import { executeUnarchiveRoom } from '../../../lib/server/methods/unarchiveRoom'
 import { getUserMentionsByChannel } from '../../../mentions/server/methods/getUserMentionsByChannel';
 import { settings } from '../../../settings/server';
 import { normalizeMessagesForUser } from '../../../utils/server/lib/normalizeMessagesForUser';
+import type { ExtractRoutesFromAPI } from '../ApiClass';
 import { API } from '../api';
 import { addUserToFileObj } from '../helpers/addUserToFileObj';
 import { composeRoomWithLastMessage } from '../helpers/composeRoomWithLastMessage';
@@ -960,24 +966,112 @@ API.v1.addRoute(
 	},
 );
 
-API.v1.addRoute(
-	'channels.list',
-	{
-		authRequired: true,
-		permissionsRequired: {
-			GET: { permissions: ['view-c-room', 'view-joined-room'], operation: 'hasAny' },
+type ChannelsListProps = PaginatedRequest<{ _id?: string }>;
+
+type ChannelsListJoinedProps = PaginatedRequest<{ roomId?: string }>;
+
+const channelsListPropsSchema = {
+	type: 'object',
+	properties: {
+		_id: {
+			type: 'string',
 		},
-		validateParams: isChannelsListProps,
+		query: {
+			type: 'string',
+		},
+		count: {
+			type: 'number',
+		},
+		offset: {
+			type: 'number',
+		},
+		sort: {
+			type: 'string',
+		},
 	},
-	{
-		async get() {
+	required: [],
+	additionalProperties: false,
+};
+
+const channelsListJoinedPropsSchema = {
+	type: 'object',
+	properties: {
+		roomId: {
+			type: 'string',
+		},
+		query: {
+			type: 'string',
+		},
+		count: {
+			type: 'number',
+		},
+		offset: {
+			type: 'number',
+		},
+		sort: {
+			type: 'string',
+		},
+	},
+	required: [],
+	additionalProperties: false,
+};
+
+const isChannelsListProps = ajv.compile<ChannelsListProps>(channelsListPropsSchema);
+
+const isChannelsListJoinedProps = ajv.compile<ChannelsListJoinedProps>(channelsListJoinedPropsSchema);
+
+const channelsEndpoints = API.v1
+	.get(
+		'channels.list',
+		{
+			authRequired: true,
+			permissionsRequired: {
+				GET: { permissions: ['view-c-room', 'view-joined-room'], operation: 'hasAny' },
+			},
+			query: isChannelsListProps,
+			response: {
+				400: validateBadRequestErrorResponse,
+				401: validateUnauthorizedErrorResponse,
+				403: validateForbiddenErrorResponse,
+				200: ajv.compile<{
+					count: number;
+					offset: number;
+					channels: IRoom[];
+					total: number;
+				}>({
+					type: 'object',
+					properties: {
+						count: {
+							type: 'number',
+							description: 'The number of sounds returned in this response.',
+						},
+						offset: {
+							type: 'number',
+							description: 'The number of sounds that were skipped in this response.',
+						},
+						total: {
+							type: 'number',
+							description: 'The total number of sounds that match the query.',
+						},
+						channels: { type: 'array', items: { $ref: '#/components/schemas/IRoom' } },
+						success: {
+							type: 'boolean',
+							enum: [true],
+						},
+					},
+					required: ['offset', 'count', 'total', 'channels', 'success'],
+					additionalProperties: false,
+				}),
+			},
+		},
+		async function action() {
 			const { offset, count } = await getPaginationItems(this.queryParams);
 			const { sort, fields, query } = await this.parseJsonQuery();
 			const hasPermissionToSeeAllPublicChannels = await hasPermissionAsync(this.userId, 'view-c-room');
 
 			const { _id } = this.queryParams;
 
-			const ourQuery = {
+			const ourQuery: Filter<IRoom> = {
 				...query,
 				...(_id ? { _id } : {}),
 				t: 'c',
@@ -1029,14 +1123,47 @@ API.v1.addRoute(
 				total,
 			});
 		},
-	},
-);
-
-API.v1.addRoute(
-	'channels.list.joined',
-	{ authRequired: true },
-	{
-		async get() {
+	)
+	.get(
+		'channels.list.joined',
+		{
+			authRequired: true,
+			query: isChannelsListJoinedProps,
+			response: {
+				400: validateBadRequestErrorResponse,
+				401: validateUnauthorizedErrorResponse,
+				200: ajv.compile<{
+					count: number;
+					offset: number;
+					channels: IRoom[];
+					total: number;
+				}>({
+					type: 'object',
+					properties: {
+						count: {
+							type: 'number',
+							description: 'The number of sounds returned in this response.',
+						},
+						offset: {
+							type: 'number',
+							description: 'The number of sounds that were skipped in this response.',
+						},
+						total: {
+							type: 'number',
+							description: 'The total number of sounds that match the query.',
+						},
+						channels: { type: 'array', items: { $ref: '#/components/schemas/IRoom' } },
+						success: {
+							type: 'boolean',
+							enum: [true],
+						},
+					},
+					required: ['offset', 'count', 'total', 'channels', 'success'],
+					additionalProperties: false,
+				}),
+			},
+		},
+		async function action() {
 			const { offset, count } = await getPaginationItems(this.queryParams);
 			const { sort, fields } = await this.parseJsonQuery();
 
@@ -1060,7 +1187,7 @@ API.v1.addRoute(
 			});
 
 			const [channels, total] = await Promise.all([cursor.toArray(), totalCount]);
-
+			
 			return API.v1.success({
 				channels: await Promise.all(channels.map((room) => composeRoomWithLastMessage(room, this.userId))),
 				offset,
@@ -1068,8 +1195,7 @@ API.v1.addRoute(
 				total,
 			});
 		},
-	},
-);
+	);
 
 API.v1.addRoute(
 	'channels.members',
@@ -1489,3 +1615,10 @@ API.v1.addRoute(
 		},
 	},
 );
+
+export type ChannelsEndpoints = ExtractRoutesFromAPI<typeof channelsEndpoints>;
+
+declare module '@rocket.chat/rest-typings' {
+	// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-empty-interface
+	interface Endpoints extends ChannelsEndpoints {}
+}
