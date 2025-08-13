@@ -12,7 +12,6 @@ import type { ChannelsInviteProps } from './ChannelsInviteProps';
 import type { ChannelsJoinProps } from './ChannelsJoinProps';
 import type { ChannelsKickProps } from './ChannelsKickProps';
 import type { ChannelsLeaveProps } from './ChannelsLeaveProps';
-import type { ChannelsListProps } from './ChannelsListProps';
 import type { ChannelsMessagesProps } from './ChannelsMessagesProps';
 import type { ChannelsModeratorsProps } from './ChannelsModeratorsProps';
 import type { ChannelsOnlineProps } from './ChannelsOnlineProps';
@@ -33,7 +32,6 @@ import type { PaginatedRequest } from '../../helpers/PaginatedRequest';
 import type { PaginatedResult } from '../../helpers/PaginatedResult';
 
 export * from './ChannelsFilesListProps';
-export * from './ChannelsListProps';
 export * from './ChannelsOnlineProps';
 
 export type ChannelsEndpoints = {
@@ -66,9 +64,6 @@ export type ChannelsEndpoints = {
 		POST: (params: ChannelsConvertToTeamProps) => {
 			team: ITeam;
 		};
-	};
-	'/v1/channels.info': {
-		GET: (params: { roomId: string } | { roomName: string }) => { channel: IRoom };
 	};
 	'/v1/channels.counters': {
 		GET: (params: { roomId: string; userId: string } | { roomName: string; userId: string }) => {
@@ -170,22 +165,6 @@ export type ChannelsEndpoints = {
 	'/v1/channels.invite': {
 		POST: (params: ChannelsInviteProps) => {
 			channel: IRoom;
-		};
-	};
-	'/v1/channels.list': {
-		GET: (params: ChannelsListProps) => {
-			count: number;
-			offset: number;
-			channels: IRoom[];
-			total: number;
-		};
-	};
-	'/v1/channels.list.joined': {
-		GET: (params: ChannelsListProps) => {
-			count: number;
-			offset: number;
-			channels: IRoom[];
-			total: number;
 		};
 	};
 	'/v1/channels.online': {
