@@ -34,7 +34,7 @@ type CloudConfirmationPollDataSuccess = {
 			address: string;
 			license: string;
 			updatedAt: string;
-			modules: string;
+			modules?: string;
 			expireAt: string;
 		};
 	};
