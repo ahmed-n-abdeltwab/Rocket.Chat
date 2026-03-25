@@ -198,7 +198,7 @@ async function handleInvite({
 	}
 }
 
-const getUpdateUserNameDebounced = mem((userId: string) => debounce((name: string) => Users.setName(userId, name), 2000));
+const getUpdateUserNameDebounced = mem((userId: string) => debounce((name: string) => Users.setName(userId, name), 1000));
 
 function updateUserNameDebounced(userId: string, newName: string): void {
 	void getUpdateUserNameDebounced(userId)(newName);
@@ -231,9 +231,12 @@ async function handleJoin({
 		void updateUserNameDebounced(joiningUser._id, content.displayname || '');
 	}
 
-	// update room name for DMs
 	if (room.t === 'd') {
-		await Room.updateDirectMessageRoomName(room, [subscription._id]);
+		await Room.updateDirectMessageRoomName(
+			room,
+			[subscription._id],
+			[{ _id: joiningUser._id, name: content.displayname || joiningUser.name || joiningUser.username, username: joiningUser.username }],
+		);
 	}
 
 	if (!subscription.status) {
