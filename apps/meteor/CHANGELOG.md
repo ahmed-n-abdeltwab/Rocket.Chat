@@ -1,5 +1,28 @@
 # @rocket.chat/meteor
 
+## 8.4.1
+
+### Patch Changes
+
+- Bump @rocket.chat/meteor version.
+
+- Bump @rocket.chat/meteor version.
+
+- ([#40410](https://github.com/RocketChat/Rocket.Chat/pull/40410) by [@dionisio-bot](https://github.com/dionisio-bot)) Disables SAML login when it is set to validate signatures without the proper configuration for it
+
+- ([#40459](https://github.com/RocketChat/Rocket.Chat/pull/40459) by [@dionisio-bot](https://github.com/dionisio-bot)) Allows users to search for attribute values when assigning them to rooms
+
+- ([#40410](https://github.com/RocketChat/Rocket.Chat/pull/40410) by [@dionisio-bot](https://github.com/dionisio-bot)) Security Hotfix (https://docs.rocket.chat/docs/security-fixes-and-updates)
+
+- <details><summary>Updated dependencies [5b291c38600757482aaf261a02487abdf5f14007]:</summary>
+
+  - @rocket.chat/model-typings@2.2.1
+  - @rocket.chat/core-typings@8.4.1
+  - @rocket.chat/models@2.2.1
+  - @rocket.chat/i18n@3.0.1
+  - @rocket.chat/rest-typings@8.4.1
+  </details>
+
 ## 8.4.0
 
 ### Minor Changes
