@@ -1,5 +1,7 @@
 # @rocket.chat/desktop-api
 
+## 1.2.0
+
 ## 1.2.0-rc.0
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # @rocket.chat/core-typings
 
+## 8.5.0
+
+### Patch Changes
+
+- ([#40405](https://github.com/RocketChat/Rocket.Chat/pull/40405)) Security Hotfix (https://docs.rocket.chat/docs/security-fixes-and-updates)
+
+- <details><summary>Updated dependencies [90f15e32ae843ed146ccf711ee3201408d1e8731, 90f15e32ae843ed146ccf711ee3201408d1e8731]:</summary>
+
+  - @rocket.chat/ui-kit@1.1.0
+  </details>
+
 ## 8.5.0-rc.6
 
 ## 8.5.0-rc.5

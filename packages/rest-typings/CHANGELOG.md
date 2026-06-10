@@ -1,5 +1,23 @@
 # @rocket.chat/rest-typings
 
+## 8.5.0
+
+### Minor Changes
+
+- ([#39617](https://github.com/RocketChat/Rocket.Chat/pull/39617)) Adds new API endpoints `custom-sounds.create` and `custom-sounds.update` to manage custom sounds with strict file validation for size and specific MIME types to ensure system compatibility.
+
+- ([#40612](https://github.com/RocketChat/Rocket.Chat/pull/40612)) Adds `freeSwitchExtension` as a query parameter for `api/v1/users.info`
+
+### Patch Changes
+
+- ([#40513](https://github.com/RocketChat/Rocket.Chat/pull/40513)) Fixes the `users.presence` endpoint returning an empty array when called with multiple comma-separated IDs, caused by `ajvQuery` coercing the string into a single-element array after the OpenAPI migration
+
+- <details><summary>Updated dependencies [90f15e32ae843ed146ccf711ee3201408d1e8731, 12897e25d0dc25b7373f5264d38f38a5a7444257, 90f15e32ae843ed146ccf711ee3201408d1e8731]:</summary>
+
+  - @rocket.chat/ui-kit@1.1.0
+  - @rocket.chat/core-typings@8.5.0
+  </details>
+
 ## 8.5.0-rc.6
 
 ### Patch Changes

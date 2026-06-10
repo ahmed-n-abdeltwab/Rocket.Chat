@@ -1,5 +1,24 @@
 # @rocket.chat/model-typings
 
+## 2.3.0
+
+### Minor Changes
+
+- ([#39617](https://github.com/RocketChat/Rocket.Chat/pull/39617)) Adds new API endpoints `custom-sounds.create` and `custom-sounds.update` to manage custom sounds with strict file validation for size and specific MIME types to ensure system compatibility.
+
+### Patch Changes
+
+- ([#40524](https://github.com/RocketChat/Rocket.Chat/pull/40524)) Ensures OAuth tokens are cleaned up after user deactivation
+
+- ([#40496](https://github.com/RocketChat/Rocket.Chat/pull/40496)) Ensures that deactivated users have their login tokens cleaned up in users.deactivateidle
+
+- ([#40405](https://github.com/RocketChat/Rocket.Chat/pull/40405)) Security Hotfix (https://docs.rocket.chat/docs/security-fixes-and-updates)
+
+- <details><summary>Updated dependencies [12897e25d0dc25b7373f5264d38f38a5a7444257]:</summary>
+
+  - @rocket.chat/core-typings@8.5.0
+  </details>
+
 ## 2.3.0-rc.0
 
 ### Minor Changes
